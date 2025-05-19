@@ -1,0 +1,103 @@
+# === HUGGINGFACE SETTINGS CONFIGURATION ===
+# You can configure all aspects of your huggingface 
+hf_configuration:
+  token: hf_sjnSUpmQluVANxZuwxcIRpAjbGYykgjXY # jyou can get one from here: https://huggingface.co/docs/huggingface_hub/en/quick-start#authentication
+  hf_organization: DNN # set this env variable to be your username!
+  private: false # true by default, set to false to make the dataset publicly viewable!
+  hf_dataset_name: yourbench_example # name of the dataset to save the traces, and generated questions to.
+  concat_if_exist: false # concatenate the dataset if it already exists
+
+# you can also set this to be a local dataset
+local_dataset_dir: /home/tom/fssd/yourbench/chemistry_train
+
+# === MODEL CONFIGURATION ===
+# 定义通用模型配置
+model_defaults: &model_defaults
+  provider: null
+  base_url: https://api.pandalla.ai/v1
+  api_key: sk-aY3WkDCHZqFSuNlHeCG3R9lk9j39fEGxWXNlgt2hqHwHvjy # 请使用自己的api keyB
+  max_concurrent_requests: 4
+
+model_list:   
+  - model_name: gpt-4.1
+    <<: *model_defaults
+
+  - model_name: gemini-2.5-pro-exp-03-25
+    <<: *model_defaults
+
+  - model_name: gemini-2.5-flash-preview-04-17
+    <<: *model_defaults
+  
+  - model_name: claude-3-7-sonnet-20250219
+    <<: *model_defaults
+
+  - model_name: chatgpt-4o-latest
+    <<: *model_defaults
+
+model_roles:
+  ingestion:
+    - gpt-4.1 # you should use a vision supported model for ingestion
+  summarization:
+    - gemini-2.5-pro-exp-03-25
+  chunking:
+    - /home/tom/fssd/model/cache/models--BAAI--bge-m3 
+  single_shot_question_generation:
+    - gpt-4.1
+  multi_hop_question_generation:
+    - gpt-4.1
+
+pipeline:
+  # to convert your documents from their source format to markdown
+  ingestion:
+    run: false
+    # set this to where your raw documents are located
+    source_documents_dir: yourbench/example/chemistry/raw
+    # .... and this to where you want them to be processed to
+    output_dir: yourbench/example/chemistry/processed
+
+  # to convert your documents to a huggingface dataset
+  upload_ingest_to_hub:
+    run: true
+    source_documents_dir: yourbench/example/chemistry/processed
+
+  # to create a global summary of your documents
+  summarization:
+    run: true
+  
+  chunking:
+    run: true
+    chunking_configuration:
+      l_min_tokens: 128 # how many minimum tokens you want in each chunk
+      l_max_tokens: 512 # how many max tokens in each chunk
+      tau_threshold: 0.7 # what threshold to decide a boundary
+      h_min: 2 # for multi-hop configurations, minimum number of unique chunks to combine
+      h_max: 4 # maximum number of unique chunks to combine to make a multi-hop set
+      num_multihops_factor: 2   # or any integer or float. higher numbers generate a larger number of multi-hops
+      chunking_mode: "fast_chunking" # or "fast_chunking"
+  
+  single_shot_question_generation:
+    run: true
+    # you can add any additional instructions you want here! try it out!
+    additional_instructions: "生成一个学术问题以测试研究生的学习能力"
+    # for cost reduction. if you set all, then all chunks will be used
+    chunk_sampling:
+      mode: "count" # or "all" for all chunks
+      value: 5 # randomly chose 5 chunks generating questions
+      random_seed: 123
+  
+  multi_hop_question_generation:
+    run: true
+    additional_instructions: "生成一个学术问题以测试研究生的学习能力"
+    # for cost reduction
+    chunk_sampling:
+      mode: "count" # or "count" for a fixed number
+      value: 2
+      random_seed: 42
+
+  # this combines your single shot and multi-hop questions into one nice dataset!
+  lighteval:
+    run: false
+
+
+## 启动命令
+# yourbench run --config yourbench/example/configs/example.yaml --debug
